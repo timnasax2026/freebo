@@ -1,0 +1,21 @@
+{
+    "name": "toxic-mini",
+    "description": "mini web bot",
+    "logo": "https://raw.githubusercontent.com/xhclintohn/Music-Clips-Collection/main/mini.png",
+    "repository": "https://github.com/xhclintohn/Toxic-Mini",
+    
+    "keywords": [
+    "toxicminibot","MiniBot"
+    ],
+    
+    "success_url": "/", 
+    "buildpacks": [{ "url": "https://github.com/heroku/heroku-buildpack-nodejs#latest" } ],
+    "env": {      
+      "PORT": {
+        "description": "Port for web app.4000,5000,3000... any!",
+        "value": "5000",
+        "required": false 
+      }
+    }   
+
+}
