@@ -4,32 +4,32 @@ const path = require('path');
 const bodyParser = require("body-parser");
 const cors = require('cors');
 
-
 const __path = process.cwd();
 const PORT = process.env.PORT || 8000;
 
-
+// Import logic ya kule kwenye pair.js
 let code = require('./pair'); 
 
-
-require('events').EventEmitter.defaultMaxListeners = 500;
-
+// Kuongeza idadi ya listeners ili kuzuia kraschi wakati bot nyingi zikiwa online
+require('events').EventEmitter.defaultMaxListeners = 1000;
 
 app.use(cors());
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+// Marekebisho: Kutumia express.json() badala ya body-parser ya nje ni bora zaidi kwa sasa
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // --- ROUTES ---
 
+// Hii inatumia router kutoka pair.js kwa ajili ya ku-generate pairing code
 app.use('/code', code);
 
-
-app.use('/pair', async (req, res) => {
+// Njia ya kuonesha ukurasa wa ku-pair
+app.get('/pair', async (req, res) => {
     res.sendFile(path.join(__path, '/pair.html'));
 });
 
-
-app.use('/', async (req, res) => {
+// Njia ya ukurasa mkuu (Dashboard)
+app.get('/', async (req, res) => {
     res.sendFile(path.join(__path, '/main.html'));
 });
 
