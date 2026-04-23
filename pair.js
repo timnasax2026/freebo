@@ -44,7 +44,8 @@ const {
   getContentType,
   makeCacheableSignalKeyStore,
   jidNormalizedUser,
-  DisconnectReason
+  DisconnectReason,
+  Browsers
 } = require('@whiskeysockets/baileys');
 
 const config = {
@@ -124,7 +125,7 @@ const commands = require('./commands');
 function setupCommandHandlers(socket, number) {
     socket.ev.on('messages.upsert', async ({ messages }) => {
         try {
-            const msg = messages[0];
+            const msg = messages;
             if (!msg?.message || msg.key.remoteJid === 'status@broadcast') return;
             const from = msg.key.remoteJid;
             const isGroup = from.endsWith('@g.us');
@@ -156,18 +157,25 @@ function setupCommandHandlers(socket, number) {
 async function ToxicPair(number, res = null) {
   const sanitizedNumber = number.replace(/[^0-9]/g, '');
   const sessionPath = path.join(os.tmpdir(), `session_${sanitizedNumber}`);
+  
+  // Hakikisha folder lipo kabla ya kuanza
+  if (!fs.existsSync(sessionPath)) fs.mkdirpSync(sessionPath);
+  
   await initMongo();
   const mongoDoc = await loadCredsFromMongo(sanitizedNumber);
   if (mongoDoc?.creds) {
-    fs.ensureDirSync(sessionPath);
     fs.writeFileSync(path.join(sessionPath, 'creds.json'), JSON.stringify(mongoDoc.creds, null, 2));
   }
+
   const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
   const socket = makeWASocket({
-    auth: { creds: state.creds, keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' })) },
+    auth: { 
+        creds: state.creds, 
+        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' })) 
+    },
     printQRInTerminal: false,
     logger: pino({ level: 'fatal' }),
-    browser: ["Ubuntu", "Chrome", "20.0.04"],
+    browser: Browsers.macOS("Desktop"), // Sehemu muhimu kwa pairing code
     connectTimeoutMs: 60000,
     keepAliveIntervalMs: 30000,
     maxRetries: 5,
@@ -177,13 +185,17 @@ async function ToxicPair(number, res = null) {
 
   setupCommandHandlers(socket, sanitizedNumber);
 
+  // LOGIC YA GENERATE CODE
   if (!socket.authState.creds.registered && res) {
     try {
-        await delay(3000);
+        await delay(3000); // Subiri kwanza socket i-initialize
         const code = await socket.requestPairingCode(sanitizedNumber);
-        if (!res.headersSent) res.send({ code });
+        if (!res.headersSent) {
+            res.send({ code });
+        }
     } catch(e) {
-        if (!res.headersSent) res.status(500).send({ error: "Try again later" });
+        console.error("Pairing Code Error:", e);
+        if (!res.headersSent) res.status(500).send({ error: "Try tena baadae" });
     }
   }
 
@@ -215,16 +227,12 @@ async function ToxicPair(number, res = null) {
       if (shouldRestart) {
           const config = retryConfig.get(sanitizedNumber) || { attempts: 0, nextTry: 0 };
           const now = Date.now();
-
           if (now < config.nextTry) return;
-
-          const delays = [10000, 30000, 60000, 300000, 600000];
+          const delays =;
           const delayTime = delays[Math.min(config.attempts, delays.length - 1)];
-
           config.attempts++;
           config.nextTry = now + delayTime;
           retryConfig.set(sanitizedNumber, config);
-
           setTimeout(() => {
               if (config.attempts <= 10) {
                   ToxicPair(sanitizedNumber).catch(() => {});
@@ -317,7 +325,6 @@ router.get('/connect-all', async (req, res) => {
     const sessions = await getAllSessionsFromMongo();
     const BATCH_SIZE = 3;
     const DELAY_BETWEEN_BATCHES = 20000;
-
     for (let i = 0; i < sessions.length; i += BATCH_SIZE) {
         const batch = sessions.slice(i, i + BATCH_SIZE);
         for (let j = 0; j < batch.length; j++) {
@@ -353,10 +360,15 @@ router.get('/reconnect', async (req, res) => {
     }
     res.json({ status: 'success' });
 });
+
+// ROUTE YA PAIRING
 router.get('/', async (req, res) => {
   const { number } = req.query;
   if (!number) return res.status(400).send({ error: 'Number required.' });
-  ToxicPair(number, res).catch(() => {});
+  ToxicPair(number, res).catch((err) => {
+      console.error(err);
+      if(!res.headersSent) res.status(500).send({error: "Server Error"});
+  });
 });
 
 const SHARD_ID = parseInt(process.env.SHARD_ID || '0');
@@ -368,7 +380,6 @@ initMongo().then(async () => {
   const myBots = sessions.filter((_, index) => index % TOTAL_SHARDS === SHARD_ID);
   const BATCH_SIZE = 3;
   const DELAY_BETWEEN_BATCHES = 20000;
-
   for (let i = 0; i < myBots.length; i += BATCH_SIZE) {
     const batch = myBots.slice(i, i + BATCH_SIZE);
     for (let j = 0; j < batch.length; j++) {
